@@ -1553,32 +1553,50 @@ def should_summarize_paper_with_llm(paper: dict[str, Any]) -> bool:
 def fallback_summary(paper: dict[str, Any], best_match: dict[str, Any]) -> dict[str, str]:
     abstract = paper.get("summary", "")
     first_sentence = re.split(r"(?<=[.!?])\s+", abstract)[0] if abstract else ""
+    reason = best_match.get("reason", "与配置方向存在文本匹配。")
     if paper.get("source_type") == "conference" and not has_meaningful_summary(paper):
-        return {
-            "problem": "DBLP 题录没有摘要，且未在外部论文索引中找到足够可靠的同题论文摘要。",
-            "method": "请打开论文链接查看方法和系统设计细节。",
-            "innovation": "仅凭标题无法可靠判断创新点，已避免占用模型翻译额度。",
-            "evidence": "题录信息来自会议索引，技术细节需要在原文中核验。",
-            "limitations": "DBLP 通常不提供摘要；如果 arXiv、Semantic Scholar、OpenAlex 或 Crossref 暂未收录摘要，自动摘要会缺失。",
-            "why_relevant": best_match.get("reason", "与配置方向存在文本匹配。"),
+        base = {
+            "core_question": "DBLP 题录没有摘要，且未在外部论文索引中找到可靠摘要。",
+            "method_overview": "请打开论文链接查看方法和系统设计细节。",
+            "key_innovation": "仅凭标题无法可靠判断创新点，已避免占用模型翻译额度。",
+            "experiment_evidence": "题录信息来自会议索引，技术细节需在原文中核验。",
+            "limitations_and_risks": "DBLP 通常不提供摘要；若 arXiv、OpenAlex 或 Crossref 暂未收录摘要则自动分析会缺失。",
+            "why_relevant": reason,
+            "key_insight": "暂无足够信息提炼核心洞察，建议打开原文阅读。",
+            "read_priority": "low",
+            "read_priority_reason": "缺少摘要，无法判断优先级",
         }
-    if not has_meaningful_summary(paper):
-        return {
-            "problem": "来源没有提供足够摘要，当前不调用模型做标题猜测。",
-            "method": "请打开论文链接查看方法细节。",
-            "innovation": "标题信息不足，无法可靠提取创新点。",
-            "evidence": "证据不足，需要阅读全文核验。",
-            "limitations": "缺少摘要会降低自动相关性和中文总结质量。",
-            "why_relevant": best_match.get("reason", "与配置方向存在文本匹配。"),
+    elif not has_meaningful_summary(paper):
+        base = {
+            "core_question": "来源没有提供足够摘要，当前不调用模型做标题猜测。",
+            "method_overview": "请打开论文链接查看方法细节。",
+            "key_innovation": "标题信息不足，无法可靠提取创新点。",
+            "experiment_evidence": "证据不足，需阅读全文核验。",
+            "limitations_and_risks": "缺少摘要会降低自动分析和中文总结质量。",
+            "why_relevant": reason,
+            "key_insight": "暂无足够信息提炼核心洞察。",
+            "read_priority": "low",
+            "read_priority_reason": "缺少摘要，无法判断优先级",
         }
-    return {
-        "problem": "未配置模型 API，当前仅基于标题、摘要和关键词生成基础摘要。",
-        "method": first_sentence[:300] if first_sentence else "请打开论文链接查看方法细节。",
-        "innovation": "需要接入模型 API 后自动抽取更精确的中文创新点。",
-        "evidence": "来源摘要可在论文原文中核验。",
-        "limitations": "基础模式不会阅读全文，也不会进行深度技术对比。",
-        "why_relevant": best_match.get("reason", "与配置方向存在文本匹配。"),
-    }
+    else:
+        base = {
+            "core_question": "未配置模型 API，当前仅基于标题和关键词生成基础分析。",
+            "method_overview": first_sentence[:300] if first_sentence else "请打开论文链接查看方法细节。",
+            "key_innovation": "需要接入模型 API 后自动抽取更精确的中文创新点。",
+            "experiment_evidence": "来源摘要可在论文原文中核验。",
+            "limitations_and_risks": "基础模式不会阅读全文，也不会进行深度技术对比。",
+            "why_relevant": reason,
+            "key_insight": "接入 LLM API 后可自动提炼核心洞察。",
+            "read_priority": "medium",
+            "read_priority_reason": "未配置 LLM，默认中等优先级，建议人工筛选",
+        }
+    # backward compatible aliases
+    base["problem"] = base["core_question"]
+    base["method"] = base["method_overview"]
+    base["innovation"] = base["key_innovation"]
+    base["evidence"] = base["experiment_evidence"]
+    base["limitations"] = base["limitations_and_risks"]
+    return base
 
 
 def llm_enabled() -> bool:
@@ -1603,11 +1621,12 @@ def call_openai_compatible(prompt: str) -> dict[str, Any]:
     payload = {
         "model": model,
         "temperature": 0.2,
+        "max_tokens": 4096,
         "response_format": {"type": "json_object"},
         "messages": [
             {
                 "role": "system",
-                "content": "你是严谨的论文技术分析助手。只输出合法 JSON，不要输出 Markdown。",
+                "content": "你是顶尖会议（NeurIPS/ICML/ICLR/ACL/CVPR/ISCA/MICRO）的资深审稿人，擅长快速拆解论文的技术内核并给出独立判断。只输出合法 JSON，不要输出 Markdown 或多余文字。",
             },
             {"role": "user", "content": prompt},
         ],
@@ -1625,39 +1644,37 @@ def call_openai_compatible(prompt: str) -> dict[str, Any]:
 
 
 def build_llm_prompt(topic: Topic, paper: dict[str, Any], base_match: dict[str, Any]) -> str:
-    abstract_label = "摘要/题录信息" if paper.get("source_type") == "conference" else "摘要"
+    abstract_label = "题录/摘要" if paper.get("source_type") == "conference" else "摘要"
+    categories = paper.get("categories", [])
     return f"""
-请根据论文标题、摘要、分类和我的研究方向，输出精确中文分析。目标不是逐句翻译，而是综合整篇摘要快速判断这篇论文是否值得阅读。
-要求：
-1. 先识别论文真正解决的问题、核心机制、实验或系统证据，再翻译成自然中文。
-2. 不要夸大摘要中没有的信息；如果证据不足，请明确说明。
-3. 相关性判断要严格，说明它具体匹配哪些关键词、场景或系统瓶颈。
-4. 如果论文只是泛泛相关，请把 match_level 降为 medium 或 low，并在 why_relevant 里说明需要人工复核。
+你是一位每天追踪前沿论文的研究者。请对以下论文做深度精读式分析（不是翻译摘要，而是提取技术内核并给出独立判断）。
 
 我的研究方向：
-名称：{topic.name}
-描述：{topic.description}
-关键词：{", ".join(topic.keywords)}
+- 名称：{topic.name}
+- 描述：{topic.description}
+- 关键词：{", ".join(topic.keywords)}
+- arXiv 分类：{", ".join(categories) if categories else "未指定"}
 
 论文信息：
 标题：{paper.get("title", "")}
 作者：{", ".join(paper.get("authors", [])[:8])}
-arXiv 分类：{", ".join(paper.get("categories", []))}
 {abstract_label}：{paper.get("summary", "")}
 
-基础匹配信息：
-分数：{base_match.get("score")}
-等级：{base_match.get("level")}
-原因：{base_match.get("reason")}
+基础关键词匹配分：{base_match.get("score")}，等级：{base_match.get("level")}
+匹配原因：{base_match.get("reason")}
 
-请输出 JSON，字段必须为：
+请输出 JSON，每个字段都要写满，不要留空，不要写"暂未提及"之类的敷衍话：
+
 {{
-  "problem": "论文要解决的问题，中文，1-2句，避免空泛背景",
-  "method": "核心方法，中文，2-3句，包含关键技术组件或系统流程",
-  "innovation": "相对已有工作的具体创新点，中文，2-3点合并成一段",
-  "evidence": "摘要中可核验的实验、理论或系统证据；没有则写证据不足",
-  "limitations": "可能局限或需要阅读全文确认的点",
-  "why_relevant": "为什么匹配我的研究方向",
+  "core_question": "这篇论文到底想回答什么问题？不是泛泛领域描述，而是具体的研究问题或假设，1-2句",
+  "method_overview": "核心方法/系统长什么样？给出技术路线、关键组件、架构决策，3-4句",
+  "key_innovation": "相比已有工作，这篇论文真正的增量在哪里？不要只说'提出了X'，要说X为什么比现有方法更好、解决了什么之前没解决的问题，2-3点",
+  "experiment_evidence": "实验怎么设计的（数据集、baseline、指标）？主要结果是什么（带上数字）？消融实验揭示了什么？如果摘要里实验信息不足，明确指出'摘要中实验细节有限，需阅读全文验证'",
+  "limitations_and_risks": "推想可能的局限：方法假设是否过强？实验场景是否太窄？有无潜在 fairness/效率问题？这些是合理推测，不是漏看",
+  "why_relevant": "为什么这篇论文与我配置的方向相关？指出具体匹配了哪些关键词、场景或技术瓶颈，不要泛泛而谈",
+  "key_insight": "读这篇论文最值得记住的一个点是什么？可以是一个反直觉的发现、一个巧妙的设计选择、一个实用的经验教训，或者一个值得关注的技术趋势。这是精读最有价值的部分",
+  "read_priority": "high|medium|low",
+  "read_priority_reason": "一句话说明阅读优先级判断的理由",
   "match_score_adjustment": 0.0,
   "match_level": "high|medium|low"
 }}
@@ -1676,12 +1693,21 @@ def summarize_with_llm(topic: Topic, paper: dict[str, Any], base_match: dict[str
         return fallback_summary(paper, base_match), base_match
 
     summary = {
-        "problem": str(data.get("problem", "")),
-        "method": str(data.get("method", "")),
-        "innovation": str(data.get("innovation", "")),
-        "evidence": str(data.get("evidence", "")),
-        "limitations": str(data.get("limitations", "")),
+        "core_question": str(data.get("core_question", "")),
+        "method_overview": str(data.get("method_overview", "")),
+        "key_innovation": str(data.get("key_innovation", "")),
+        "experiment_evidence": str(data.get("experiment_evidence", "")),
+        "limitations_and_risks": str(data.get("limitations_and_risks", "")),
         "why_relevant": str(data.get("why_relevant", "")),
+        "key_insight": str(data.get("key_insight", "")),
+        "read_priority": str(data.get("read_priority", "low")),
+        "read_priority_reason": str(data.get("read_priority_reason", "")),
+        # backward compatible aliases
+        "problem": str(data.get("core_question", "")),
+        "method": str(data.get("method_overview", "")),
+        "innovation": str(data.get("key_innovation", "")),
+        "evidence": str(data.get("experiment_evidence", "")),
+        "limitations": str(data.get("limitations_and_risks", "")),
     }
     adjustment = float(data.get("match_score_adjustment", 0.0) or 0.0)
     adjusted_score = max(0.0, min(1.0, base_match["score"] + adjustment))

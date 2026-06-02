@@ -141,10 +141,20 @@ function textIncludes(paper, query) {
     (paper.authors || []).join(" "),
     (paper.categories || []).join(" "),
     paper.best_match?.reason,
+    paper.chinese_summary?.core_question,
+    paper.chinese_summary?.method_overview,
+    paper.chinese_summary?.key_innovation,
+    paper.chinese_summary?.experiment_evidence,
+    paper.chinese_summary?.limitations_and_risks,
+    paper.chinese_summary?.why_relevant,
+    paper.chinese_summary?.key_insight,
+    paper.chinese_summary?.read_priority_reason,
+    // backward compat with old field names
+    paper.chinese_summary?.problem,
+    paper.chinese_summary?.method,
     paper.chinese_summary?.innovation,
     paper.chinese_summary?.evidence,
     paper.chinese_summary?.limitations,
-    paper.chinese_summary?.why_relevant,
   ]
     .join(" ")
     .toLowerCase();
@@ -204,13 +214,19 @@ function renderPaper(paper) {
   setText(node, ".paper-source", paper.source || "paper");
   setText(node, ".paper-title", paper.title);
   setText(node, ".paper-authors", (paper.authors || []).slice(0, 8).join(", "));
-  setText(node, ".summary-problem", summary.problem);
-  setText(node, ".summary-method", summary.method);
-  setText(node, ".summary-innovation", summary.innovation);
-  setText(node, ".summary-evidence", summary.evidence);
-  setText(node, ".summary-limitations", summary.limitations);
+  setText(node, ".summary-core-question", summary.core_question || summary.problem);
+  setText(node, ".summary-method-overview", summary.method_overview || summary.method);
+  setText(node, ".summary-key-innovation", summary.key_innovation || summary.innovation);
+  setText(node, ".summary-experiment-evidence", summary.experiment_evidence || summary.evidence);
+  setText(node, ".summary-limitations", summary.limitations_and_risks || summary.limitations);
   setText(node, ".summary-relevant", summary.why_relevant);
+  setText(node, ".summary-key-insight", summary.key_insight);
   setText(node, ".match-reason", `${best.topic_name || "未分类"}：${best.reason || ""}`);
+
+  const priority = summary.read_priority || "low";
+  const priorityBadge = node.querySelector(".priority-badge");
+  priorityBadge.textContent = `${priority === "high" ? "优先阅读" : priority === "medium" ? "可读" : "可选"} · ${summary.read_priority_reason || ""}`;
+  priorityBadge.classList.add("priority-" + priority);
 
   const tags = node.querySelector(".paper-tags");
   for (const category of (paper.categories || []).slice(0, 8)) {
