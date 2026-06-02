@@ -1707,15 +1707,19 @@ def build_llm_prompt(topic: Topic, paper: dict[str, Any], base_match: dict[str, 
 
 
 def summarize_with_llm(topic: Topic, paper: dict[str, Any], base_match: dict[str, Any]) -> tuple[dict[str, str], dict[str, Any]]:
-    if not llm_enabled():
+    api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+    if not api_key:
         return fallback_summary(paper, base_match), base_match
 
     prompt = build_llm_prompt(topic, paper, base_match)
     try:
         data = call_openai_compatible(prompt)
     except Exception as exc:
-        print(f"Warning: LLM summary failed for {paper.get('id')}: {exc}", file=sys.stderr)
-        return fallback_summary(paper, base_match), base_match
+        print(f"LLM FAIL for {paper.get('id')}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        result = fallback_summary(paper, base_match)
+        result["core_question"] = f"LLM 调用失败({type(exc).__name__})，请检查 API Key 和账户余额。原始摘要见英文。"
+        result["key_insight"] = f"API 错误: {str(exc)[:200]}"
+        return result, base_match
 
     summary = {
         "core_question": str(data.get("core_question", "")),
@@ -2192,6 +2196,10 @@ def collect(
         llm_jobs.append((best_topic, paper))
 
     if llm_enabled() and llm_jobs:
+        api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
+        base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+        model = os.getenv("LLM_MODEL", "deepseek-chat")
+        print(f"LLM configured: key_len={len(api_key)}, base_url={base_url}, model={model}, jobs={len(llm_jobs)}", file=sys.stderr, flush=True)
         concurrency = max(1, int(os.getenv("LLM_CONCURRENCY", "2")))
         print(f"Summarizing {len(llm_jobs)} papers with LLM using concurrency={concurrency}", flush=True)
         with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
@@ -2201,6 +2209,7 @@ def collect(
                 summaries_by_id[paper_id] = (summary, adjusted_match)
                 print(f"Finished summary: {paper_id}", flush=True)
     else:
+        print(f"LLM not active: enabled={llm_enabled()}, jobs={len(llm_jobs)}", file=sys.stderr, flush=True)
         for topic, paper in llm_jobs:
             summary, adjusted_match = summarize_with_llm(topic, paper, paper["best_match"])
             summaries_by_id[str(paper.get("id", ""))] = (summary, adjusted_match)
