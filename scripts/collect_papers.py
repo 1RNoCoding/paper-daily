@@ -1452,10 +1452,14 @@ def fetch_pubmed(source: SourceConfig, topic: Topic, max_results: int, lookback_
         for date_elem in article.findall(".//ArticleDate") or []:
             if date_elem.get("DateType") in ("Electronic", "Publish"):
                 y = date_elem.findtext("Year", default="")
-                m = date_elem.findtext("Month", default="01").zfill(2)
-                d = date_elem.findtext("Day", default="01").zfill(2)
+                m = date_elem.findtext("Month", default="")
+                d = date_elem.findtext("Day", default="")
+                if m.isdigit(): m = m.zfill(2)
+                else: m = "01" if not m else m  # fallback for "Jun" etc
+                if d.isdigit(): d = d.zfill(2)
+                else: d = "01" if not d else d
                 if y:
-                    pub_date = f"{y}-{m}-{d}"
+                    pub_date = f"{y}-{m if m.isdigit() else '01'}-{d if d.isdigit() else '01'}"
                     break
         if not pub_date:
             pub_date_elem = article.find(".//Journal/JournalIssue/PubDate")
@@ -1463,16 +1467,16 @@ def fetch_pubmed(source: SourceConfig, topic: Topic, max_results: int, lookback_
                 y = pub_date_elem.findtext("Year", default="")
                 m = pub_date_elem.findtext("Month", default="")
                 d = pub_date_elem.findtext("Day", default="")
-                if m.isdigit():
-                    m = m.zfill(2)
-                else:
-                    m = "01"
-                if d.isdigit():
-                    d = d.zfill(2)
-                else:
-                    d = "01"
+                if m.isdigit(): m = m.zfill(2)
+                else: m = ""  # "Jun" or None → we'll use today's month
+                if d.isdigit(): d = d.zfill(2)
+                else: d = ""
                 if y:
-                    pub_date = f"{y}-{m}-{d}"
+                    if m and d:
+                        pub_date = f"{y}-{m}-{d}"
+                    else:
+                        # Only have year: assume this is a very recent paper (sorted by date)
+                        pub_date = f"{y}-{today.month:02d}-{today.day:02d}"
 
         journal = ""
         journal_elem = article.find(".//Journal/Title")
