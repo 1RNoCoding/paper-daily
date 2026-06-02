@@ -1642,7 +1642,6 @@ def call_openai_compatible(prompt: str) -> dict[str, Any]:
     payload = {
         "model": model,
         "temperature": 0.2,
-        "max_tokens": 4096,
         "messages": [
             {
                 "role": "system",
@@ -1660,8 +1659,12 @@ def call_openai_compatible(prompt: str) -> dict[str, Any]:
         )
         with urllib.request.urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")[:500]
+        print(f"LLM HTTP {exc.code}: {body}", file=sys.stderr)
+        raise
     except Exception as exc:
-        print(f"LLM HTTP error: {exc}", file=sys.stderr)
+        print(f"LLM error: {type(exc).__name__}: {exc}", file=sys.stderr)
         raise
     content = data["choices"][0]["message"]["content"]
     print(f"LLM response length: {len(content)} chars", file=sys.stderr)
