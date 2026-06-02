@@ -1611,6 +1611,27 @@ def llm_headers(api_key: str) -> dict[str, str]:
     }
 
 
+def extract_json_from_text(text: str) -> dict[str, Any]:
+    """Extract JSON object from LLM response, handling markdown fences and stray text."""
+    if not text or not text.strip():
+        raise ValueError("empty response")
+    # Try direct parse first
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        pass
+    # Try extracting from markdown code fence
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.S)
+    if fenced:
+        return json.loads(fenced.group(1))
+    # Try finding the outermost JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        return json.loads(text[start:end + 1])
+    raise ValueError(f"no JSON found in response: {text[:200]}")
+
+
 def call_openai_compatible(prompt: str) -> dict[str, Any]:
     api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or ""
     base_url = os.getenv("LLM_BASE_URL", "")
@@ -1622,25 +1643,29 @@ def call_openai_compatible(prompt: str) -> dict[str, Any]:
         "model": model,
         "temperature": 0.2,
         "max_tokens": 4096,
-        "response_format": {"type": "json_object"},
         "messages": [
             {
                 "role": "system",
-                "content": "你是顶尖会议（NeurIPS/ICML/ICLR/ACL/CVPR/ISCA/MICRO）的资深审稿人，擅长快速拆解论文的技术内核并给出独立判断。只输出合法 JSON，不要输出 Markdown 或多余文字。",
+                "content": "你是资深审稿人。你只输出纯 JSON 对象，以 { 开头、以 } 结束。不要输出 Markdown 代码块标记，不要输出解释文字，不要输出换行之外的任何内容。",
             },
             {"role": "user", "content": prompt},
         ],
     }
-    req = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=llm_headers(api_key),
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
+    try:
+        req = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=llm_headers(api_key),
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        print(f"LLM HTTP error: {exc}", file=sys.stderr)
+        raise
     content = data["choices"][0]["message"]["content"]
-    return json.loads(content)
+    print(f"LLM response length: {len(content)} chars", file=sys.stderr)
+    return extract_json_from_text(content)
 
 
 def build_llm_prompt(topic: Topic, paper: dict[str, Any], base_match: dict[str, Any]) -> str:
