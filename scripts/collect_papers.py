@@ -1324,8 +1324,20 @@ def fetch_feed(source: SourceConfig, max_results: int) -> list[dict[str, Any]]:
     return [paper for paper in papers if paper.get("title")]
 
 
+MEDRXIV_RELEVANT_CATEGORIES = {
+    "dermatology",
+    "surgery",
+    "ophthalmology",
+    "radiology and imaging",
+    "anesthesia",
+    "pathology",
+    "rehabilitation medicine and physical therapy",
+    "medical education",
+    "health informatics",
+}
+
 def fetch_medrxiv(source: SourceConfig, topic: Topic, max_results: int, lookback_days: int) -> list[dict[str, Any]]:
-    """Fetch papers from medRxiv JSON API."""
+    """Fetch papers from medRxiv JSON API, filtered by clinically relevant categories."""
     from datetime import date, timedelta
     today = date.today()
     start = (today - timedelta(days=lookback_days)).isoformat()
@@ -1334,6 +1346,9 @@ def fetch_medrxiv(source: SourceConfig, topic: Topic, max_results: int, lookback
     data = fetch_json_url(url, user_agent="paper-daily-collector/1.0", timeout_seconds=60)
     papers = []
     for item in data.get("collection", []):
+        category = str(item.get("category") or "").lower()
+        if category not in MEDRXIV_RELEVANT_CATEGORIES:
+            continue
         title = normalize_space(str(item.get("title") or ""))
         abstract = normalize_space(str(item.get("abstract") or ""))
         if not title:
@@ -1341,7 +1356,9 @@ def fetch_medrxiv(source: SourceConfig, topic: Topic, max_results: int, lookback
         doi = str(item.get("doi") or "")
         paper_url = f"https://www.medrxiv.org/content/{doi}" if doi else ""
         authors = [normalize_space(str(a)) for a in (item.get("authors") or [])]
-        categories = [str(item.get("category") or "")] if item.get("category") else []
+        categories = [category]
+        if item.get("category"):
+            categories.append(str(item.get("category") or ""))
         papers.append({
             "id": f"medrxiv:{doi or abs(hash(title))}",
             "source": source.name,
@@ -1352,7 +1369,7 @@ def fetch_medrxiv(source: SourceConfig, topic: Topic, max_results: int, lookback
             "updated": str(item.get("date") or ""),
             "paper_url": paper_url,
             "pdf_url": f"https://www.medrxiv.org/content/{doi}v1.full.pdf" if doi else "",
-            "categories": categories,
+            "categories": list({c for c in categories if c}),
             "seed_topic": topic.id if topic.id else "",
         })
         if len(papers) >= max_results:
@@ -1372,7 +1389,8 @@ def fetch_source_topic(source: SourceConfig, topic: Topic, max_results: int) -> 
     if source.type == "google_scholar_serpapi":
         return fetch_google_scholar_serpapi(topic, max_results, source)
     if source.type == "medrxiv":
-        return fetch_medrxiv(source, topic, max_results, int(os.getenv("LOOKBACK_DAYS", "7")))
+        medrxiv_lookback = max(30, int(os.getenv("LOOKBACK_DAYS", "7")))
+        return fetch_medrxiv(source, topic, max_results, medrxiv_lookback)
     raise ValueError(f"Unsupported topic source type: {source.type}")
 
 
