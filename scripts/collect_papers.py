@@ -2312,6 +2312,7 @@ def collect(
     daily_outside_cutoff_count = 0
     backfill_days = max(days, env_int("DAILY_BACKFILL_DAYS", 14))
     daily_backfill_cutoff = now - dt.timedelta(days=max(0, backfill_days))
+    sample_outside = 0
     for paper in dedupe_papers(all_candidates):
         is_conference_paper = paper.get("source_type") == "conference"
         if not is_conference_paper:
@@ -2326,6 +2327,14 @@ def collect(
         if not in_primary_window and not in_backfill_window:
             if not is_conference_paper:
                 daily_outside_cutoff_count += 1
+                if sample_outside < 3:
+                    sample_outside += 1
+                    print(
+                        f"  Outside window: {str(paper.get('title', ''))[:80]} | "
+                        f"date={activity_at.isoformat()} cutoff={cutoff.isoformat()} "
+                        f"source={paper.get('source', 'unknown')}",
+                        file=sys.stderr, flush=True,
+                    )
             continue
 
         matches = [score_paper(topic, paper) for topic in topics]
@@ -2333,9 +2342,21 @@ def collect(
         best_match = matches[0]
         if not is_relevant_enough(paper, best_match):
             filtered_low_relevance += 1
+            title_short = str(paper.get("title", ""))[:80]
+            print(
+                f"  Filtered: {title_short} | score={best_match['score']:.3f} "
+                f"hits={best_match.get('keyword_hits', [])} topic={best_match['topic_name']}",
+                file=sys.stderr, flush=True,
+            )
             continue
         paper["matches"] = matches
         paper["best_match"] = best_match
+        title_short = str(paper.get("title", ""))[:80]
+        print(
+            f"  Selected: {title_short} | score={best_match['score']:.3f} "
+            f"hits={best_match.get('keyword_hits', [])} topic={best_match['topic_name']}",
+            file=sys.stderr, flush=True,
+        )
         if in_backfill_window:
             paper["backfilled_from_recent_arxiv"] = True
             daily_outside_cutoff_count += 1
