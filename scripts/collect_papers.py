@@ -1297,18 +1297,23 @@ def fetch_feed(source: SourceConfig, max_results: int) -> list[dict[str, Any]]:
             }
         )
 
-    for item in root.findall(".//channel/item")[:max_results]:
-        title = normalize_space(item.findtext("title", default=""))
+    # Try RSS 2.0 channel/item or RSS 1.0 (RDF) direct item elements
+    rss_items = root.findall(".//channel/item") or root.findall("item") or root.findall(".//{http://purl.org/rss/1.0/}item")
+    for item in rss_items[:max_results]:
+        title = normalize_space(item.findtext("title", default="") or item.findtext("{http://purl.org/dc/elements/1.1/}title", default=""))
         paper_url = normalize_space(item.findtext("link", default=""))
         guid = normalize_space(item.findtext("guid", default=paper_url))
+        description = item.findtext("description", default="") or item.findtext("{http://purl.org/dc/elements/1.1/}description", default="")
+        dc_creator = item.findtext("{http://purl.org/dc/elements/1.1/}creator", default="")
+        authors = [dc_creator] if dc_creator else []
         papers.append(
             {
                 "id": f"feed:{slugify(source.name)}:{guid or paper_url or slugify(title)}",
                 "source": source.name,
                 "title": title,
-                "authors": [],
-                "summary": html_to_text(item.findtext("description", default="")),
-                "published": date_to_iso(item.findtext("pubDate", default="")),
+                "authors": authors,
+                "summary": html_to_text(description),
+                "published": date_to_iso(item.findtext("pubDate", default="") or item.findtext("{http://purl.org/dc/elements/1.1/}date", default="")),
                 "updated": "",
                 "paper_url": paper_url,
                 "pdf_url": "",
@@ -1317,6 +1322,42 @@ def fetch_feed(source: SourceConfig, max_results: int) -> list[dict[str, Any]]:
             }
         )
     return [paper for paper in papers if paper.get("title")]
+
+
+def fetch_medrxiv(source: SourceConfig, topic: Topic, max_results: int, lookback_days: int) -> list[dict[str, Any]]:
+    """Fetch papers from medRxiv JSON API."""
+    from datetime import date, timedelta
+    today = date.today()
+    start = (today - timedelta(days=lookback_days)).isoformat()
+    end = today.isoformat()
+    url = f"https://api.medrxiv.org/details/medrxiv/{start}/{end}"
+    data = fetch_json_url(url, user_agent="paper-daily-collector/1.0", timeout_seconds=60)
+    papers = []
+    for item in data.get("collection", []):
+        title = normalize_space(str(item.get("title") or ""))
+        abstract = normalize_space(str(item.get("abstract") or ""))
+        if not title:
+            continue
+        doi = str(item.get("doi") or "")
+        paper_url = f"https://www.medrxiv.org/content/{doi}" if doi else ""
+        authors = [normalize_space(str(a)) for a in (item.get("authors") or [])]
+        categories = [str(item.get("category") or "")] if item.get("category") else []
+        papers.append({
+            "id": f"medrxiv:{doi or abs(hash(title))}",
+            "source": source.name,
+            "title": title,
+            "authors": [a for a in authors if a],
+            "summary": abstract,
+            "published": str(item.get("date") or ""),
+            "updated": str(item.get("date") or ""),
+            "paper_url": paper_url,
+            "pdf_url": f"https://www.medrxiv.org/content/{doi}v1.full.pdf" if doi else "",
+            "categories": categories,
+            "seed_topic": topic.id if topic.id else "",
+        })
+        if len(papers) >= max_results:
+            break
+    return papers
 
 
 def fetch_source_topic(source: SourceConfig, topic: Topic, max_results: int) -> list[dict[str, Any]]:
@@ -1330,6 +1371,8 @@ def fetch_source_topic(source: SourceConfig, topic: Topic, max_results: int) -> 
         return fetch_semantic_scholar(topic, max_results, source)
     if source.type == "google_scholar_serpapi":
         return fetch_google_scholar_serpapi(topic, max_results, source)
+    if source.type == "medrxiv":
+        return fetch_medrxiv(source, topic, max_results, int(os.getenv("LOOKBACK_DAYS", "7")))
     raise ValueError(f"Unsupported topic source type: {source.type}")
 
 

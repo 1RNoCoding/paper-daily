@@ -1,10 +1,8 @@
 {
   "sources": [
-    { "type": "arxiv", "name": "arXiv" },
     {
-      "type": "feed",
-      "name": "medRxiv Dermatology",
-      "url": "https://medrxiv.org/rss/recent.rss"
+      "type": "medrxiv",
+      "name": "medRxiv"
     },
     {
       "type": "feed",
@@ -23,7 +21,7 @@
         "scar prevention", "fibroblast", "TGF-beta", "myofibroblast",
         "laser scar", "scar revision", "scar assessment"
       ],
-      "arxiv_categories": ["q-bio.TO", "q-bio.CB", "q-bio.MN"]
+      "arxiv_categories": []
     },
     {
       "id": "ptosis_oculoplastic",
@@ -36,7 +34,7 @@
         "Muller muscle", "frontalis sling", "eyelid reconstruction",
         "canthoplasty", "epicanthoplasty", "double eyelid"
       ],
-      "arxiv_categories": ["q-bio.TO"]
+      "arxiv_categories": []
     },
     {
       "id": "energy_device_aesthetics",
@@ -52,7 +50,7 @@
         "non-invasive skin tightening", "skin remodeling",
         "aesthetic device", "dermatology laser"
       ],
-      "arxiv_categories": ["physics.med-ph", "q-bio.TO"]
+      "arxiv_categories": []
     }
   ]
 }
