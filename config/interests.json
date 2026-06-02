@@ -1,22 +1,12 @@
 {
   "sources": [
     {
+      "type": "pubmed",
+      "name": "PubMed"
+    },
+    {
       "type": "medrxiv",
       "name": "medRxiv"
-    },
-    {
-      "type": "openalex",
-      "name": "OpenAlex"
-    },
-    {
-      "type": "feed",
-      "name": "PRS (Plastic and Reconstructive Surgery)",
-      "url": "https://journals.lww.com/plasreconsurg/_layouts/15/OAKS.Journals/feed.aspx?FeedType=AheadOfPrint"
-    },
-    {
-      "type": "feed",
-      "name": "JAMA Dermatology",
-      "url": "https://jamanetwork.com/rss/site_17_2.xml"
     }
   ],
   "topics": [
@@ -25,12 +15,12 @@
       "name": "瘢痕机制与临床研究",
       "description": "关注增生性瘢痕、瘢痕疙瘩的形成机制、病理生理、预防和治疗策略的临床与基础研究。",
       "keywords": [
-        "scar", "keloid", "cicatrix", "wound healing", "fibrosis",
-        "fibroblast", "myofibroblast", "TGF-beta",
-        "hypertrophic scar", "scar management", "scar prevention",
-        "scar revision", "laser scar", "burn scar", "acne scar",
-        "contracture", "silicone gel", "intralesional",
-        "corticosteroid scar", "5-fluorouracil scar"
+        "hypertrophic scar", "keloid", "scar contracture",
+        "wound healing scar", "cicatrix treatment",
+        "scar laser", "scar prevention", "fibroblast scar",
+        "myofibroblast", "intralesional steroid scar",
+        "silicone gel scar", "burn scar reconstruction",
+        "acne scar treatment"
       ],
       "arxiv_categories": []
     },
@@ -39,14 +29,14 @@
       "name": "上睑下垂与眼整形",
       "description": "关注上睑下垂矫正、眼睑整形、眶周年轻化等眼整形手术技术及临床研究。",
       "keywords": [
-        "ptosis", "blepharoplasty", "eyelid", "oculoplastic",
-        "blepharoptosis", "periorbital", "levator",
-        "Muller muscle", "frontalis sling",
-        "canthoplasty", "epicanthoplasty", "double eyelid",
-        "orbital surgery", "eyelid reconstruction",
-        "brow lift", "brow ptosis", "dermatochalasis",
-        "orbicularis", "tarsus", "eyelid crease",
-        "ptosis repair", "ptosis surgery"
+        "blepharoptosis surgery", "blepharoplasty", "eyelid ptosis",
+        "levator resection", "frontalis suspension ptosis",
+        "Muller muscle conjunctival resection",
+        "ptosis repair", "congenital ptosis",
+        "aponeurotic ptosis", "periorbital rejuvenation",
+        "lower blepharoplasty", "canthoplasty",
+        "eyelid reconstruction", "brow lift ptosis",
+        "oculoplastic surgery"
       ],
       "arxiv_categories": []
     },
@@ -55,17 +45,17 @@
       "name": "声光电设备临床应用与进展",
       "description": "关注激光、强脉冲光、射频、超声等在皮肤美容及治疗中的临床应用、安全性及新技术进展。",
       "keywords": [
-        "laser", "fractional", "CO2 laser", "Er:YAG", "Nd:YAG",
-        "picosecond", "intense pulsed light", "IPL",
-        "radiofrequency", "microneedle", "HIFU",
-        "focused ultrasound", "photodynamic",
-        "energy-based device", "skin resurfacing",
-        "laser rejuvenation", "photobiomodulation",
-        "skin tightening", "skin remodeling",
-        "ablative laser", "non-ablative",
-        "photothermolysis", "cryolipolysis",
-        "electroporation", "plasma skin",
-        "LED therapy", "microcurrent"
+        "fractional laser skin", "CO2 laser resurfacing",
+        "picosecond laser dermatology",
+        "intense pulsed light skin",
+        "radiofrequency skin tightening",
+        "microneedle radiofrequency",
+        "HIFU facial", "high intensity focused ultrasound",
+        "energy based device aesthetic",
+        "laser scar treatment", "laser rejuvenation",
+        "photodynamic therapy skin",
+        "nonablative laser skin", "ablative laser",
+        "skin tightening device"
       ],
       "arxiv_categories": []
     }

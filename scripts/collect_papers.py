@@ -1377,6 +1377,111 @@ def fetch_medrxiv(source: SourceConfig, topic: Topic, max_results: int, lookback
     return papers
 
 
+def fetch_pubmed(source: SourceConfig, topic: Topic, max_results: int, lookback_days: int) -> list[dict[str, Any]]:
+    """Fetch papers from PubMed via Entrez E-utilities."""
+    import time
+    from datetime import date, timedelta
+
+    today = date.today()
+    start = (today - timedelta(days=lookback_days)).isoformat()
+    # Build PubMed query: keywords OR'd together, with date filter
+    terms = [f'"{kw}"[Title/Abstract]' for kw in topic.keywords[:10]]
+    query = " OR ".join(terms)
+    query += f' AND ("{start}"[Date - Entrez] : "3000"[Date - Entrez])'
+    pubmed_email = os.getenv("PUBMED_EMAIL", os.getenv("CONTACT_EMAIL", "paper-daily@example.com"))
+
+    # Step 1: search
+    search_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        f"?db=pubmed&retmax={max_results}&sort=date&retmode=json&email={urllib.parse.quote(pubmed_email)}"
+        f"&term={urllib.parse.quote(query)}"
+    )
+    search_data = fetch_json_url(search_url, user_agent="paper-daily-collector/1.0", timeout_seconds=30)
+    idlist = (search_data.get("esearchresult") or {}).get("idlist") or []
+    if not idlist:
+        return []
+
+    time.sleep(0.5)  # Be polite to NCBI
+
+    # Step 2: fetch details
+    fetch_url = (
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+        f"?db=pubmed&retmode=xml&rettype=abstract&email={urllib.parse.quote(pubmed_email)}"
+        f"&id={','.join(idlist)}"
+    )
+    xml_bytes = request_bytes(fetch_url, headers={"User-Agent": "paper-daily-collector/1.0"}, timeout=60)
+    root = ET.fromstring(xml_bytes)
+
+    papers = []
+    for article_elem in root.findall(".//PubmedArticle"):
+        article = article_elem.find(".//Article")
+        if article is None:
+            continue
+        title_elem = article.find(".//ArticleTitle")
+        title = normalize_space(title_elem.text or "") if title_elem is not None and title_elem.text else ""
+        if not title:
+            continue
+
+        pmid = ""
+        pmid_elem = article_elem.find(".//PMID")
+        if pmid_elem is not None and pmid_elem.text:
+            pmid = pmid_elem.text.strip()
+
+        abstract_elems = article.findall(".//AbstractText")
+        abstract_parts = []
+        for ab in abstract_elems:
+            label = ab.get("Label", "")
+            text = normalize_space(ab.text or "") if ab.text else ""
+            if text:
+                abstract_parts.append(f"{label}: {text}" if label else text)
+        abstract = " ".join(abstract_parts)
+
+        authors = []
+        for author_elem in article.findall(".//Author"):
+            last = author_elem.findtext("LastName", default="")
+            fore = author_elem.findtext("ForeName", default="")
+            if last:
+                authors.append(f"{fore} {last}".strip())
+
+        pub_date_elem = article.find(".//Journal/JournalIssue/PubDate")
+        pub_date = ""
+        if pub_date_elem is not None:
+            y = pub_date_elem.findtext("Year", default="")
+            m = pub_date_elem.findtext("Month", default="01").zfill(2)
+            d = pub_date_elem.findtext("Day", default="01").zfill(2)
+            if y:
+                pub_date = f"{y}-{m}-{d}"
+
+        journal = ""
+        journal_elem = article.find(".//Journal/Title")
+        if journal_elem is not None and journal_elem.text:
+            journal = journal_elem.text.strip()
+
+        mesh_elems = article_elem.findall(".//MeshHeading/DescriptorName")
+        mesh_terms = [m.text.strip() for m in mesh_elems if m.text]
+
+        paper_url = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/" if pmid else ""
+        paper_id = f"pubmed:{pmid}" if pmid else f"pubmed:{abs(hash(title))}"
+
+        papers.append({
+            "id": paper_id,
+            "source": source.name,
+            "title": title,
+            "authors": authors,
+            "summary": abstract,
+            "published": pub_date,
+            "updated": pub_date,
+            "paper_url": paper_url,
+            "pdf_url": "",
+            "categories": [journal] + mesh_terms[:5] if journal else mesh_terms[:5],
+            "seed_topic": topic.id if topic.id else "",
+        })
+        if len(papers) >= max_results:
+            break
+
+    return papers
+
+
 def fetch_source_topic(source: SourceConfig, topic: Topic, max_results: int) -> list[dict[str, Any]]:
     if source.type == "arxiv":
         return fetch_arxiv(topic, max_results)
@@ -1391,6 +1496,9 @@ def fetch_source_topic(source: SourceConfig, topic: Topic, max_results: int) -> 
     if source.type == "medrxiv":
         medrxiv_lookback = max(30, int(os.getenv("LOOKBACK_DAYS", "7")))
         return fetch_medrxiv(source, topic, max_results, medrxiv_lookback)
+    if source.type == "pubmed":
+        pubmed_lookback = max(30, int(os.getenv("LOOKBACK_DAYS", "7")))
+        return fetch_pubmed(source, topic, max_results, pubmed_lookback)
     raise ValueError(f"Unsupported topic source type: {source.type}")
 
 
