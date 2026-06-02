@@ -1398,6 +1398,9 @@ def fetch_pubmed(source: SourceConfig, topic: Topic, max_results: int, lookback_
     )
     search_data = fetch_json_url(search_url, user_agent="paper-daily-collector/1.0", timeout_seconds=30)
     idlist = (search_data.get("esearchresult") or {}).get("idlist") or []
+    count = (search_data.get("esearchresult") or {}).get("count") or "0"
+    error = (search_data.get("esearchresult") or {}).get("ERROR") or ""
+    print(f"PubMed search for {topic.name}: count={count}, ids={len(idlist)}, error={error}", file=sys.stderr, flush=True)
     if not idlist:
         return []
 
@@ -1413,7 +1416,9 @@ def fetch_pubmed(source: SourceConfig, topic: Topic, max_results: int, lookback_
     root = ET.fromstring(xml_bytes)
 
     papers = []
-    for article_elem in root.findall(".//PubmedArticle"):
+    articles_found = root.findall(".//PubmedArticle")
+    print(f"PubMed fetch for {topic.name}: XML={len(xml_bytes)} bytes, articles={len(articles_found)}", file=sys.stderr, flush=True)
+    for article_elem in articles_found:
         article = article_elem.find(".//Article")
         if article is None:
             continue
