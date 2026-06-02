@@ -1634,10 +1634,12 @@ def extract_json_from_text(text: str) -> dict[str, Any]:
 
 def call_openai_compatible(prompt: str) -> dict[str, Any]:
     api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("DEEPSEEK_API_KEY") or ""
-    base_url = os.getenv("LLM_BASE_URL", "")
+    base_url = (os.getenv("LLM_BASE_URL") or "").strip()
     if not base_url:
         base_url = "https://api.deepseek.com/v1" if os.getenv("DEEPSEEK_API_KEY") else "https://api.openai.com/v1"
-    model = os.getenv("LLM_MODEL", "deepseek-chat" if os.getenv("DEEPSEEK_API_KEY") else "gpt-4o-mini")
+    model = (os.getenv("LLM_MODEL") or "").strip()
+    if not model:
+        model = "deepseek-v4-pro" if os.getenv("DEEPSEEK_API_KEY") else "gpt-4o-mini"
     endpoint = base_url.rstrip("/") + "/chat/completions"
     payload = {
         "model": model,
