@@ -1448,14 +1448,31 @@ def fetch_pubmed(source: SourceConfig, topic: Topic, max_results: int, lookback_
             if last:
                 authors.append(f"{fore} {last}".strip())
 
-        pub_date_elem = article.find(".//Journal/JournalIssue/PubDate")
         pub_date = ""
-        if pub_date_elem is not None:
-            y = pub_date_elem.findtext("Year", default="")
-            m = pub_date_elem.findtext("Month", default="01").zfill(2)
-            d = pub_date_elem.findtext("Day", default="01").zfill(2)
-            if y:
-                pub_date = f"{y}-{m}-{d}"
+        for date_elem in article.findall(".//ArticleDate") or []:
+            if date_elem.get("DateType") in ("Electronic", "Publish"):
+                y = date_elem.findtext("Year", default="")
+                m = date_elem.findtext("Month", default="01").zfill(2)
+                d = date_elem.findtext("Day", default="01").zfill(2)
+                if y:
+                    pub_date = f"{y}-{m}-{d}"
+                    break
+        if not pub_date:
+            pub_date_elem = article.find(".//Journal/JournalIssue/PubDate")
+            if pub_date_elem is not None:
+                y = pub_date_elem.findtext("Year", default="")
+                m = pub_date_elem.findtext("Month", default="")
+                d = pub_date_elem.findtext("Day", default="")
+                if m.isdigit():
+                    m = m.zfill(2)
+                else:
+                    m = "01"
+                if d.isdigit():
+                    d = d.zfill(2)
+                else:
+                    d = "01"
+                if y:
+                    pub_date = f"{y}-{m}-{d}"
 
         journal = ""
         journal_elem = article.find(".//Journal/Title")
